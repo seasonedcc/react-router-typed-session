@@ -133,13 +133,13 @@ describe("makeTypedSession", () => {
     const typed = userSession(session);
 
     typed.setAll({ name: "Alice", email: "alice@example.com" });
-    expect(typed.isSet()).toBe(true);
+    expect(typed.isSet).toBe(true);
   });
 
   test("isSet returns false when no data exists", () => {
     const session = createMockSession();
     const typed = userSession(session);
-    expect(typed.isSet()).toBe(false);
+    expect(typed.isSet).toBe(false);
   });
 
   test("throws SessionValidationError on validation failure", () => {

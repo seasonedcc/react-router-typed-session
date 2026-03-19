@@ -55,8 +55,8 @@ export interface TypedSession<T extends Record<string, unknown>> {
   unset<K extends keyof T & string>(key: K): SessionLike;
   /** Remove the entire session key. */
   destroy(): SessionLike;
-  /** Check whether the session key has any data stored. */
-  isSet(): boolean;
+  /** Whether the session key has any data stored. */
+  readonly isSet: boolean;
   /** Alias for `getAll()`. Convenient for serializing in loaders. */
   toJSON(): T | undefined;
 }
@@ -151,7 +151,7 @@ export function makeTypedSession<T extends Record<string, unknown>>(
       return session;
     },
 
-    isSet(): boolean {
+    get isSet(): boolean {
       return session.get(sessionKey) !== undefined;
     },
 

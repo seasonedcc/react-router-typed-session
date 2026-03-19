@@ -38,7 +38,7 @@ const authSession = makeTypedSession("auth", authSchema);
 | `merge(data)`     | `SessionLike`       | Yes       | Yes    |
 | `unset(key)`      | `SessionLike`       | No        | No     |
 | `destroy()`       | `SessionLike`       | No        | No     |
-| `isSet()`         | `boolean`           | No        | No     |
+| `isSet`           | `boolean`           | No        | No     |
 | `toJSON()`        | `T \| undefined`    | Yes       | No     |
 
 Key distinctions:
@@ -96,7 +96,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await sessionStorage.getSession(request.headers.get("Cookie"));
   const auth = authSession(session);
 
-  if (!auth.isSet()) throw redirect("/login");
+  if (!auth.isSet) throw redirect("/login");
 
   return { user: auth.getAll()! };
 }

@@ -88,7 +88,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await sessionStorage.getSession(request.headers.get("Cookie"));
   const auth = authSession(session);
 
-  if (!auth.isSet()) throw redirect("/login");
+  if (!auth.isSet) throw redirect("/login");
 
   return { user: auth.getAll()! };
   //              ^? { userId: string; role: "admin" | "user" }
@@ -135,7 +135,7 @@ const role = auth.strictGet("role");
 
 ```typescript
 auth.destroy();
-// removes the session key — auth.isSet() is now false
+// removes the session key — auth.isSet is now false
 
 return redirect("/login", {
   headers: {
@@ -233,7 +233,7 @@ Returns a function `(session: SessionLike) => TypedSession<T>`.
 | `merge(data)`     | `SessionLike`       | Yes       | `SessionValidationError` |
 | `unset(key)`      | `SessionLike`       | No        | No                       |
 | `destroy()`       | `SessionLike`       | No        | No                       |
-| `isSet()`         | `boolean`           | No        | No                       |
+| `isSet`           | `boolean`           | No        | No                       |
 | `toJSON()`        | `T \| undefined`    | Yes       | No                       |
 
 ### `SessionValidationError`
