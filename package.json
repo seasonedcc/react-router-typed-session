@@ -1,0 +1,75 @@
+{
+  "name": "react-router-typed-session",
+  "version": "0.0.1",
+  "description": "Type-safe sessions for React Router. Schema-agnostic via Standard Schema.",
+  "keywords": [
+    "arktype",
+    "react-router",
+    "session",
+    "standard-schema",
+    "type-safe",
+    "typed",
+    "valibot",
+    "zod"
+  ],
+  "homepage": "https://github.com/seasonedcc/react-router-typed-session#readme",
+  "bugs": {
+    "url": "https://github.com/seasonedcc/react-router-typed-session/issues"
+  },
+  "license": "MIT",
+  "author": "Seasoned <guga@seasoned.cc>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seasonedcc/react-router-typed-session.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack && cp dist/index.d.mts dist/index.d.ts",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build",
+    "prepare": "vp config"
+  },
+  "devDependencies": {
+    "@standard-schema/spec": "^1.1.0",
+    "@types/node": "^25.5.0",
+    "@typescript/native-preview": "7.0.0-dev.20260316.1",
+    "bumpp": "^11.0.1",
+    "typescript": "^5.9.3",
+    "vite-plus": "^0.1.11",
+    "zod": "4.3.6"
+  },
+  "peerDependencies": {
+    "react-router": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "react-router": {
+      "optional": true
+    }
+  },
+  "packageManager": "pnpm@10.32.1",
+  "pnpm": {
+    "overrides": {
+      "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+      "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+    }
+  },
+  "inlinedDependencies": {
+    "@standard-schema/spec": "1.1.0"
+  }
+}
