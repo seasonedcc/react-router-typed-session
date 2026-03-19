@@ -1,14 +1,22 @@
 # react-router-typed-session
 
-Type-safe sessions for React Router. Schema-agnostic via [Standard Schema](https://github.com/standard-schema/standard-schema).
+Type-safe sessions for React Router. Validate with any schema library, get full autocomplete and type errors at compile time.
 
 ## Features
 
-- Full type safety for session `get`, `set`, `merge`, `getAll`, and more
-- Works with any Standard Schema-compatible library (Zod, Valibot, ArkType, etc.)
-- No runtime dependency on `react-router` — uses a structural `SessionLike` interface
-- Validates data with your schema on `strictGet`, `setAll`, `getAll`, and `merge`
-- Lightweight — zero external dependencies in the bundle
+🛡️ Schema-validated reads and writes — catch invalid session data before it reaches your app, not with a runtime crash in production.
+
+🔮 Fully typed accessors — autocomplete for keys, inferred value types, and compile-time errors for typos or wrong types.
+
+🔌 Works with any [Standard Schema](https://standardschema.dev/) library — Zod, Valibot, ArkType, and more.
+
+🗂️ Multiple typed sessions on one cookie — namespace different concerns (`auth`, `location`, `preferences`) on a single session storage.
+
+🎯 Structured error handling — `SessionValidationError` gives you the session key and schema issues, not just a string to parse.
+
+🔗 Chainable mutations — `set`, `setAll`, `merge`, `destroy` return the session, so you can pass it straight to `commitSession`.
+
+🪶 Zero runtime dependencies.
 
 ## Install
 
@@ -16,34 +24,85 @@ Type-safe sessions for React Router. Schema-agnostic via [Standard Schema](https
 npm install react-router-typed-session
 ```
 
-## Usage
+## The problem
+
+React Router sessions are untyped. Every `session.get()` returns `unknown`, and `session.set()` accepts anything:
+
+```typescript
+// Without react-router-typed-session:
+const userId = session.get("userId");
+//    ^? unknown — you have to cast manually
+
+session.set("userId", 123);
+// No error — you accidentally stored a number instead of a string
+
+session.set("userID", "abc");
+// No error — typo in the key, silently writes to the wrong slot
+
+const role = session.get("role") as "admin" | "user";
+// Compiles fine even if "role" was never set — crashes at runtime
+```
+
+## The solution
+
+Define your session shape once with a schema. Get type safety everywhere:
 
 ```typescript
 import { makeTypedSession } from "react-router-typed-session";
 import { z } from "zod";
 
-const schema = z.object({
-  userId: z.string(),
-  role: z.enum(["admin", "user"]),
-});
-
-const authSession = makeTypedSession("auth", schema);
+const authSession = makeTypedSession(
+  "auth",
+  z.object({
+    userId: z.string(),
+    role: z.enum(["admin", "user"]),
+  }),
+);
 
 // In a loader or action:
-export async function loader({ request }: LoaderFunctionArgs) {
+const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+const auth = authSession(session);
+
+auth.get("userId");
+//   ^? string | undefined — correct type, no casting
+
+auth.get("userID");
+//       ~~~~~~~ — Type error: "userID" is not a valid key
+
+auth.set("userId", 123);
+//                 ~~~ — Type error: number is not assignable to string
+
+auth.set("role", "admin");
+//   ^? SessionLike — returns the session for chaining
+
+const data = auth.getAll();
+//    ^? { userId: string; role: "admin" | "user" } | undefined
+```
+
+## Usage
+
+### Reading session data in a loader
+
+```typescript
+export async function loader({ request }: Route.LoaderArgs) {
   const session = await sessionStorage.getSession(request.headers.get("Cookie"));
   const auth = authSession(session);
 
-  const data = auth.getAll();
-  if (!data) throw redirect("/login");
+  if (!auth.isSet()) throw redirect("/login");
 
-  return { user: data };
+  return { user: auth.getAll()! };
+  //              ^? { userId: string; role: "admin" | "user" }
 }
+```
 
-export async function action({ request }: ActionFunctionArgs) {
+### Writing session data in an action
+
+```typescript
+export async function action({ request }: Route.ActionArgs) {
   const session = await sessionStorage.getSession(request.headers.get("Cookie"));
   const auth = authSession(session);
 
+  // setAll validates against the schema before writing
   auth.setAll({ userId: "123", role: "admin" });
 
   return redirect("/dashboard", {
@@ -54,57 +113,103 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 ```
 
-## Schema libraries
-
-Any library implementing the [Standard Schema](https://github.com/standard-schema/standard-schema) spec works:
-
-```typescript
-// Zod
-import { z } from "zod";
-const schema = z.object({ name: z.string() });
-
-// Valibot
-import * as v from "valibot";
-const schema = v.object({ name: v.string() });
-
-// ArkType
-import { type } from "arktype";
-const schema = type({ name: "string" });
-```
-
-## Patterns
-
-### Protecting routes
-
-```typescript
-const auth = authSession(session);
-if (!auth.isSet()) throw redirect("/login");
-const user = auth.getAll()!;
-```
-
-### Multiple typed sessions on one cookie
-
-```typescript
-const authSession = makeTypedSession("auth", authSchema);
-const locationSession = makeTypedSession("location", locationSchema);
-
-// Both operate on the same underlying session storage
-const auth = authSession(session);
-const location = locationSession(session);
-```
-
 ### Partial updates with merge
 
+Update some fields without touching the rest:
+
 ```typescript
-const auth = authSession(session);
-auth.merge({ role: "admin" }); // keeps other fields intact
+auth.merge({ role: "admin" });
+// keeps userId intact, validates the merged result
+```
+
+### Validated reads with strictGet
+
+`get` reads raw data without validation (fast, for trusted reads). `strictGet` validates the entire session first — use it when you need guarantees:
+
+```typescript
+const role = auth.strictGet("role");
+//    ^? "admin" | "user" — guaranteed valid, throws if not
 ```
 
 ### Destroying a session
 
 ```typescript
+auth.destroy();
+// removes the session key — auth.isSet() is now false
+
+return redirect("/login", {
+  headers: {
+    "Set-Cookie": await sessionStorage.commitSession(session),
+  },
+});
+```
+
+## Multiple typed sessions on one cookie
+
+Namespace different concerns on a single session storage. Each typed session only touches its own key:
+
+```typescript
+const authSession = makeTypedSession(
+  "auth",
+  z.object({ userId: z.string(), role: z.enum(["admin", "user"]) }),
+);
+
+const locationSession = makeTypedSession(
+  "location",
+  z.object({ lat: z.number(), lng: z.number(), city: z.string() }),
+);
+
+// Both operate on the same underlying session
 const auth = authSession(session);
-auth.destroy(); // removes the session key entirely
+const location = locationSession(session);
+
+auth.get("userId"); // ^? string | undefined
+location.get("lat"); // ^? number | undefined
+// Each is fully typed to its own schema
+```
+
+## Error handling
+
+Methods that validate (`strictGet`, `setAll`, `merge`) throw `SessionValidationError` with structured data — no string parsing needed:
+
+```typescript
+import { SessionValidationError } from "react-router-typed-session";
+
+try {
+  auth.setAll({ userId: 123 as any, role: "invalid" });
+} catch (error) {
+  if (error instanceof SessionValidationError) {
+    error.sessionKey; // "auth" — which session failed
+    error.issues; // [{ message: "Expected string, received number" }, ...]
+    error.message; // 'Session "auth" validation failed:\n  - Expected string, ...'
+  }
+}
+```
+
+`getAll` and `toJSON` return `undefined` instead of throwing — use them when missing/invalid data is expected:
+
+```typescript
+const data = auth.getAll();
+if (!data) throw redirect("/login");
+// data is fully typed from here
+```
+
+## Schema libraries
+
+Works with any library implementing the [Standard Schema](https://standardschema.dev/) spec:
+
+```typescript
+// Zod
+import { z } from "zod";
+const schema = z.object({ userId: z.string(), role: z.enum(["admin", "user"]) });
+
+// Valibot
+import * as v from "valibot";
+const schema = v.object({ userId: v.string(), role: v.picklist(["admin", "user"]) });
+
+// ArkType
+import { type } from "arktype";
+const schema = type({ userId: "string", role: "'admin' | 'user'" });
 ```
 
 ## API reference
@@ -113,49 +218,36 @@ auth.destroy(); // removes the session key entirely
 
 Returns a function `(session: SessionLike) => TypedSession<T>`.
 
-- **sessionKey** — the key used to store data in the session
+- **sessionKey** — the key used to namespace data in the underlying session
 - **schema** — any Standard Schema-compatible schema
 
 ### `TypedSession<T>`
 
-| Method            | Description                                                  |
-| ----------------- | ------------------------------------------------------------ |
-| `get(key)`        | Get a single value. Returns `T[K] \| undefined`.             |
-| `strictGet(key)`  | Get a single value with validation. Throws on invalid data.  |
-| `set(key, value)` | Set a single value. Returns `SessionLike` for chaining.      |
-| `setAll(data)`    | Validate and replace all session data. Throws on invalid.    |
-| `getAll()`        | Get all data with validation. Returns `T \| undefined`.      |
-| `merge(data)`     | Merge partial data with existing, validates the result.      |
-| `unset(key)`      | Remove a single key from session data.                       |
-| `destroy()`       | Remove the entire session key.                               |
-| `isSet()`         | Check if the session key has any data.                       |
-| `toJSON()`        | Alias for `getAll()`. Convenient for serializing in loaders. |
+| Method            | Returns             | Validates | Throws                   |
+| ----------------- | ------------------- | --------- | ------------------------ |
+| `get(key)`        | `T[K] \| undefined` | No        | No                       |
+| `strictGet(key)`  | `T[K]`              | Yes       | `SessionValidationError` |
+| `set(key, value)` | `SessionLike`       | No        | No                       |
+| `setAll(data)`    | `SessionLike`       | Yes       | `SessionValidationError` |
+| `getAll()`        | `T \| undefined`    | Yes       | No                       |
+| `merge(data)`     | `SessionLike`       | Yes       | `SessionValidationError` |
+| `unset(key)`      | `SessionLike`       | No        | No                       |
+| `destroy()`       | `SessionLike`       | No        | No                       |
+| `isSet()`         | `boolean`           | No        | No                       |
+| `toJSON()`        | `T \| undefined`    | Yes       | No                       |
 
 ### `SessionValidationError`
 
-Thrown by `strictGet`, `setAll`, and `merge` when data fails validation. Extends `Error`.
+Thrown by `strictGet`, `setAll`, and `merge` when data fails schema validation. Extends `Error`.
 
 | Property     | Type                                 | Description                        |
 | ------------ | ------------------------------------ | ---------------------------------- |
 | `sessionKey` | `string`                             | The session key that failed.       |
 | `issues`     | `ReadonlyArray<{ message: string }>` | Structured issues from the schema. |
 
-```typescript
-import { SessionValidationError } from "react-router-typed-session";
-
-try {
-  auth.strictGet("role");
-} catch (error) {
-  if (error instanceof SessionValidationError) {
-    console.log(error.sessionKey); // "auth"
-    console.log(error.issues); // [{ message: "Expected string, ..." }]
-  }
-}
-```
-
 ### `SessionLike`
 
-A structural interface matching react-router's `Session`:
+A structural interface matching react-router's `Session`. No build-time dependency on react-router required:
 
 ```typescript
 interface SessionLike {
